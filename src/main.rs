@@ -1,11 +1,8 @@
-use std::{
-    collections::HashMap,
-    io::{self},
-};
+use std::io::{self};
 
 use crate::{
     command::{Command, parse_input},
-    store::{get, set},
+    store::Store,
 };
 
 mod command;
@@ -14,11 +11,13 @@ mod errors;
 mod store;
 
 fn main() {
+    let mut store = Store::init();
+
+    store.restore();
+
     println!(
         "Welcome to mini-redis!\nPlease input your command\nSupported commands:\n`EXIT`, `exit` to exit;"
     );
-
-    let mut store: HashMap<String, String> = HashMap::new();
 
     loop {
         let mut input = String::new();
@@ -43,14 +42,15 @@ fn main() {
                 break;
             }
             Command::Get(key) => {
-                let value = get(&store, key);
+                let value = store.get(key);
 
-                println!("GET SUCCESS: {value}");
+                println!("{value}");
 
                 continue;
             }
-            Command::Set(key, value) => {
-                set(&mut store, key, value);
+            Command::Set(k, v) => {
+                store.set(k, v);
+                store.save(k, v);
 
                 println!("SET SUCCESS");
 
