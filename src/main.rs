@@ -1,4 +1,9 @@
-use std::io::{self};
+use std::{
+    io::{self},
+    sync::Arc,
+    thread::{self, sleep},
+    time::Duration,
+};
 
 use crate::{
     command::{Command, parse_input},
@@ -6,18 +11,25 @@ use crate::{
 };
 
 mod command;
-mod constants;
 mod errors;
 mod store;
 
 fn main() {
-    let mut store = Store::init();
-
-    store.restore();
+    let store = Arc::new(Store::init());
 
     println!(
         "Welcome to mini-redis!\nPlease input your command\nSupported commands:\n`EXIT`, `exit` to exit;"
     );
+
+    let compact_store = Arc::clone(&store);
+    thread::spawn(move || {
+        loop {
+            sleep(Duration::new(15, 0));
+            if let Err(err) = compact_store.compact_log() {
+                eprintln!("Could not compact store: {err}");
+            }
+        }
+    });
 
     loop {
         let mut input = String::new();
@@ -42,15 +54,19 @@ fn main() {
                 break;
             }
             Command::Get(key) => {
-                let value = store.get(key);
-
-                println!("{value}");
+                match store.get(key) {
+                    Ok(value) => println!("{value}"),
+                    Err(err) => eprintln!("Could not get value from store: {err}"),
+                }
 
                 continue;
             }
             Command::Set(k, v) => {
                 store.set(k, v);
-                store.save(k, v);
+
+                if let Err(err) = store.save_to_log(k, v) {
+                    eprintln!("Could not save to log: {err}");
+                };
 
                 println!("SET SUCCESS");
 

@@ -1,6 +1,6 @@
 use std::fmt::{self};
 
-use crate::errors::DBError;
+use crate::errors::CommandError;
 
 #[derive(Debug, PartialEq)]
 pub enum Command<'a> {
@@ -19,22 +19,22 @@ impl fmt::Display for Command<'_> {
     }
 }
 
-pub fn parse_input(input: &'_ String) -> Result<Command<'_>, DBError> {
+pub fn parse_input(input: &'_ String) -> Result<Command<'_>, CommandError> {
     let input: Vec<&str> = input.split_whitespace().collect();
     let cmd = match input.get(0) {
         Some(&input_cmd) => input_cmd.to_uppercase(),
-        None => return Err(DBError::EmptyInput),
+        None => return Err(CommandError::EmptyInput),
     };
 
     match cmd.as_str() {
         "GET" | "SET" => (),
         "EXIT" => return Ok(Command::Exit),
-        _ => return Err(DBError::UnexpectedCommand(cmd.to_string())),
+        _ => return Err(CommandError::UnexpectedCommand(cmd.to_string())),
     }
 
     let key = match input.get(1) {
         Some(&key) => key,
-        None => return Err(DBError::KeyNotFound),
+        None => return Err(CommandError::KeyNotFound),
     };
 
     if cmd == "GET" {
@@ -43,7 +43,7 @@ pub fn parse_input(input: &'_ String) -> Result<Command<'_>, DBError> {
 
     let value = match input.get(2) {
         Some(&value) => value,
-        None => return Err(DBError::ValueNotFound),
+        None => return Err(CommandError::ValueNotFound),
     };
 
     Ok(Command::Set(key, value))
@@ -84,7 +84,7 @@ pub mod tests {
 
         assert_eq!(
             cmd.err().unwrap(),
-            DBError::UnexpectedCommand(input.to_uppercase())
+            CommandError::UnexpectedCommand(input.to_uppercase())
         );
     }
 
@@ -93,7 +93,7 @@ pub mod tests {
         let input = "get".to_string();
         let cmd = parse_input(&input);
 
-        assert_eq!(cmd.err().unwrap(), DBError::KeyNotFound);
+        assert_eq!(cmd.err().unwrap(), CommandError::KeyNotFound);
     }
 
     #[test]
@@ -101,6 +101,6 @@ pub mod tests {
         let input = "set key".to_string();
         let cmd = parse_input(&input);
 
-        assert_eq!(cmd.err().unwrap(), DBError::ValueNotFound);
+        assert_eq!(cmd.err().unwrap(), CommandError::ValueNotFound);
     }
 }
