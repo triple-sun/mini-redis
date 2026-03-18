@@ -1,6 +1,4 @@
-use std::fmt::{self};
-
-use crate::errors::CommandError;
+use std::{error::Error, fmt::{self}};
 
 #[derive(Debug, PartialEq)]
 pub enum Command<'a> {
@@ -19,10 +17,32 @@ impl fmt::Display for Command<'_> {
     }
 }
 
+#[derive(Debug, PartialEq)]
+pub enum CommandError {
+    EmptyInput,
+    KeyNotFound,
+    ValueNotFound,
+    UnexpectedCommand(String),
+}
+
+impl Error for CommandError {}
+
+impl fmt::Display for CommandError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match &self {
+            CommandError::EmptyInput => write!(f, "Empty input received!"),
+            CommandError::KeyNotFound => write!(f, "Key not found!"),
+            CommandError::ValueNotFound => write!(f, "Value not found!"),
+            CommandError::UnexpectedCommand(cmd) => write!(f, "Unexpected command: {cmd}"),
+        }
+    }
+}
+
 pub fn parse_input(input: &'_ String) -> Result<Command<'_>, CommandError> {
-    let input: Vec<&str> = input.split_whitespace().collect();
-    let cmd = match input.get(0) {
-        Some(&input_cmd) => input_cmd.to_uppercase(),
+    let mut input = input.split_whitespace();
+
+    let cmd = match input.next() {
+        Some(cmd) => cmd.to_uppercase(),
         None => return Err(CommandError::EmptyInput),
     };
 
@@ -32,8 +52,8 @@ pub fn parse_input(input: &'_ String) -> Result<Command<'_>, CommandError> {
         _ => return Err(CommandError::UnexpectedCommand(cmd.to_string())),
     }
 
-    let key = match input.get(1) {
-        Some(&key) => key,
+    let key = match input.next() {
+        Some(key) => key,
         None => return Err(CommandError::KeyNotFound),
     };
 
@@ -41,8 +61,8 @@ pub fn parse_input(input: &'_ String) -> Result<Command<'_>, CommandError> {
         return Ok(Command::Get(key));
     }
 
-    let value = match input.get(2) {
-        Some(&value) => value,
+    let value = match input.next() {
+        Some(value) => value,
         None => return Err(CommandError::ValueNotFound),
     };
 

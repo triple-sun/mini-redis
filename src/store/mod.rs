@@ -12,9 +12,38 @@ use crate::command::{Command, parse_input};
 
 const LOG_FILE_PATH: &str = "./db_log/db.log";
 
+pub trait Storage {
+    fn set(&self, k: &str, v: &str);
+    fn get(&self, k: &str) -> Result<String, Box<dyn Error + '_>>;
+}
+
 pub struct Store {
     pub db: RwLock<HashMap<String, String>>,
     pub log_file_path: String,
+}
+
+impl Storage for Store {
+    fn set(&self, k: &str, v: &str) {
+        let mut db_lock = match self.db.write() {
+            Ok(db) => db,
+            Err(msg) => {
+                eprintln!("Error locking db: {msg}");
+                return;
+            }
+        };
+
+        db_lock.insert(k.to_string(), v.to_string());
+    }
+
+    fn get(&self, k: &str) -> Result<String, Box<dyn Error + '_>> {
+        let db_lock = self.db.read()?;
+
+        if let Some(v) = db_lock.get(k) {
+            return Ok(v.to_owned());
+        }
+
+        Ok("(nil)".to_string())
+    }
 }
 
 impl Store {
@@ -33,28 +62,6 @@ impl Store {
         };
 
         return store;
-    }
-
-    pub fn set(&self, k: &str, v: &str) {
-        let mut db_lock = match self.db.write() {
-            Ok(db) => db,
-            Err(msg) => {
-                eprintln!("Error locking db: {msg}");
-                return;
-            }
-        };
-
-        db_lock.insert(k.to_string(), v.to_string());
-    }
-
-    pub fn get(&self, k: &str) -> Result<String, Box<dyn Error + '_>> {
-        let db_lock = self.db.read()?;
-
-        if let Some(v) = db_lock.get(k) {
-            return Ok(v.to_owned());
-        }
-
-        Ok("(nil)".to_string())
     }
 
     pub fn save_to_log(&self, k: &str, v: &str) -> Result<(), io::Error> {

@@ -1,4 +1,5 @@
 use std::{
+    env,
     io::{self},
     sync::Arc,
     thread::{self, sleep},
@@ -7,14 +8,19 @@ use std::{
 
 use crate::{
     command::{Command, parse_input},
-    store::Store,
+    flags::parse_flags,
+    store::{Storage, Store},
 };
 
 mod command;
-mod errors;
+mod flags;
 mod store;
 
 fn main() {
+    let args = env::args();
+
+    parse_flags(args);
+
     let store = Arc::new(Store::init());
 
     println!(
