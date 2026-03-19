@@ -1,10 +1,14 @@
-use std::{error::Error, fmt::{self}};
+use std::{
+    error::Error,
+    fmt::{self},
+};
 
 #[derive(Debug, PartialEq)]
 pub enum Command<'a> {
     Get(&'a str),
     Set(&'a str, &'a str),
     Exit,
+    Help,
 }
 
 impl fmt::Display for Command<'_> {
@@ -13,6 +17,7 @@ impl fmt::Display for Command<'_> {
             Command::Exit => write!(f, "EXIT"),
             Command::Get(k) => write!(f, "GET {k}"),
             Command::Set(k, v) => write!(f, "SET {k} {v}"),
+            Command::Help => write!(f, "HELP"),
         }
     }
 }
@@ -49,6 +54,7 @@ pub fn parse_input(input: &'_ String) -> Result<Command<'_>, CommandError> {
     match cmd.as_str() {
         "GET" | "SET" => (),
         "EXIT" => return Ok(Command::Exit),
+        "HELP" => return Ok(Command::Help),
         _ => return Err(CommandError::UnexpectedCommand(cmd.to_string())),
     }
 

@@ -2,40 +2,33 @@ use std::{
     env,
     io::{self},
     sync::Arc,
-    thread::{self, sleep},
-    time::Duration,
 };
 
 use crate::{
     command::{Command, parse_input},
-    flags::parse_flags,
-    store::{Storage, Store},
+    options::{Mode, parse_options},
+    storage::{Storage, log_store::LogStorage, mem_store::MemStorage},
 };
 
 mod command;
-mod flags;
-mod store;
+mod options;
+mod storage;
 
 fn main() {
-    let args = env::args();
+    println!("Welcome to mini-redis!\n");
 
-    parse_flags(args);
+    let options = parse_options(env::args());
 
-    let store = Arc::new(Store::init());
+    options.print();
 
-    println!(
-        "Welcome to mini-redis!\nPlease input your command\nSupported commands:\n`EXIT`, `exit` to exit;"
-    );
+    let store: Arc<dyn Storage> = match options.mode {
+        Mode::MemOnly => MemStorage::init(options),
+        Mode::Default => LogStorage::init(options),
+    };
 
-    let compact_store = Arc::clone(&store);
-    thread::spawn(move || {
-        loop {
-            sleep(Duration::new(15, 0));
-            if let Err(err) = compact_store.compact_log() {
-                eprintln!("Could not compact store: {err}");
-            }
-        }
-    });
+    println!("");
+    println!("Please input your command");
+    println!("Type 'help' to list existing commands");
 
     loop {
         let mut input = String::new();
@@ -59,6 +52,12 @@ fn main() {
                 println!("EXIT command received, shutting down...");
                 break;
             }
+            Command::Help => {
+                println!(
+                    "Supported commands:\n'SET'/'set' {{key}} {{value}} - set value for key;\n'GET'/'get' {{key}} - get value for key\n'EXIT'/'exit' - exit the REPL loop;\n"
+                );
+                continue;
+            }
             Command::Get(key) => {
                 match store.get(key) {
                     Ok(value) => println!("{value}"),
@@ -69,10 +68,6 @@ fn main() {
             }
             Command::Set(k, v) => {
                 store.set(k, v);
-
-                if let Err(err) = store.save_to_log(k, v) {
-                    eprintln!("Could not save to log: {err}");
-                };
 
                 println!("SET SUCCESS");
 
