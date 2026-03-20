@@ -5,6 +5,5 @@ pub trait Storage {
     fn get(&self, k: &str) -> Result<String, Box<dyn Error + '_>>;
 }
 
-mod utils;
 pub mod log_store;
 pub mod mem_store;

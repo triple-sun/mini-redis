@@ -1,5 +1,8 @@
+use colored::Colorize;
 use core::fmt;
-use std::{fs::OpenOptions, io::Error, num::ParseIntError};
+use std::{cmp, fs::OpenOptions, io::Error, num::ParseIntError};
+
+use crate::utils::print_err;
 
 const DEFAULT_COMPACT_INTERVAL: u64 = 15;
 const DEFAULT_LOG_FILE_PATH: &str = "./db_log/db.log";
@@ -19,6 +22,7 @@ impl fmt::Display for Mode {
     }
 }
 
+#[derive(Debug)]
 pub enum OptionError {
     IntervalMissing,
     IntervalIncorrect(String, ParseIntError),
@@ -26,6 +30,7 @@ pub enum OptionError {
     ModeIncorrect(String),
     LogFilePathMissing,
     LogFilePathIncorrect(String, Error),
+    UnexpectedFlag(String),
 }
 
 impl fmt::Display for OptionError {
@@ -50,18 +55,19 @@ impl fmt::Display for OptionError {
             OptionError::LogFilePathIncorrect(value, err) => {
                 write!(f, "--log_file_path value {value} is incorrect: {err}")
             }
+            OptionError::UnexpectedFlag(flag) => write!(f, "Unexpected flag: {flag}"),
         }
     }
 }
 
-pub struct StorageOptions {
+pub struct Config {
     pub mode: Mode,
     pub ignore_case: bool,
     pub compact_interval: u64,
     pub log_file_path: String,
 }
 
-impl fmt::Display for StorageOptions {
+impl fmt::Display for Config {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         let fields = vec![
             ("Mode", self.mode.to_string()),
@@ -71,21 +77,25 @@ impl fmt::Display for StorageOptions {
         ];
 
         for (field, value) in fields.iter() {
-            writeln!(f, "{field}: {value}")?;
+            writeln!(
+                f,
+                "{}: {}",
+                format!("{field}").blue().bold(),
+                format!("{value}").yellow()
+            )?;
         }
 
         Ok(())
     }
 }
 
-impl StorageOptions {
+impl Config {
     pub fn print(&self) {
-        print!("{self}")
+        print!("{}", self)
     }
-}
 
-pub fn parse_options(args: impl Iterator<Item = String>) -> StorageOptions {
-    let mut result = StorageOptions {
+    pub fn from_flags(args: impl Iterator<Item = String> ) -> Config {
+        let mut config = Config {
         mode: Mode::Default,
         ignore_case: false,
         compact_interval: 15,
@@ -109,8 +119,8 @@ pub fn parse_options(args: impl Iterator<Item = String>) -> StorageOptions {
                 "mode" => {
                     match arg.get(1) {
                         Some(value) => match *value {
-                            "mem_only" => result.mode = Mode::MemOnly,
-                            "default" => result.mode = Mode::Default,
+                            "mem_only" => config.mode = Mode::MemOnly,
+                            "default" => config.mode = Mode::Default,
                             _else => errors.push(OptionError::ModeIncorrect(_else.to_string())),
                         },
                         None => {
@@ -121,7 +131,7 @@ pub fn parse_options(args: impl Iterator<Item = String>) -> StorageOptions {
                 }
                 "compact_interval" => match arg.get(1) {
                     Some(value) => match value.parse::<u64>() {
-                        Ok(value) => result.compact_interval = value,
+                        Ok(value) => config.compact_interval = cmp::max(0, value),
                         Err(err) => {
                             errors.push(OptionError::IntervalIncorrect(value.to_string(), err))
                         }
@@ -132,8 +142,13 @@ pub fn parse_options(args: impl Iterator<Item = String>) -> StorageOptions {
                     }
                 },
                 "log_file_path" => match arg.get(1) {
-                    Some(value) => match OpenOptions::new().read(true).create(true).open(value) {
-                        Ok(_) => result.log_file_path = value.to_string(),
+                    Some(value) => match OpenOptions::new()
+                        .read(true)
+                        .append(true)
+                        .create(true)
+                        .open(value)
+                    {
+                        Ok(_) => config.log_file_path = value.to_string(),
                         Err(err) => {
                             errors.push(OptionError::LogFilePathIncorrect(value.to_string(), err))
                         }
@@ -143,28 +158,40 @@ pub fn parse_options(args: impl Iterator<Item = String>) -> StorageOptions {
                         continue;
                     }
                 },
-                "ignore_case" => result.ignore_case = true,
-                _ => {}
+                "ignore_case" => config.ignore_case = true,
+                _else => errors.push(OptionError::UnexpectedFlag(_else.to_string())),
             }
         }
     }
 
-    for err in errors {
-        eprintln!("{err}")
+    config.print();
+
+    if errors.len() > 0 {
+        let errors = errors
+            .iter()
+            .map(|e| format!("{e}"))
+            .collect::<Vec<String>>()
+            .join(", ");
+
+        print_err(format!("Errors: {errors:#?}\n"));
     }
 
-    result
+    config
+    }
 }
+
 
 #[cfg(test)]
 mod tests {
+    use std::fs;
+
     use super::*;
 
     #[test]
     fn parses_no_flags() {
         let args: Vec<String> = vec![];
 
-        let flags = parse_options(args.into_iter());
+        let flags = Config::from_flags(args.into_iter());
 
         assert_eq!(flags.mode, Mode::Default);
         assert_eq!(flags.compact_interval, 15);
@@ -172,56 +199,41 @@ mod tests {
     }
 
     #[test]
-    fn parses_correct_flags() {
+    fn parses_correct_flags() -> Result<(), Box<dyn std::error::Error>> {
         let args: Vec<String> = vec![
-            String::from("--ignore_case"),
-            String::from("--ignore_case"),
             String::from("--mode=mem_only"),
+            String::from("--compact_interval=200"),
+            String::from("--ignore_case"),
+            String::from("--log_file_path=./log.db"),
         ];
 
-        let flags = parse_options(args.into_iter());
+        let flags = Config::from_flags(args.into_iter());
 
         assert_eq!(flags.mode, Mode::MemOnly);
         assert_eq!(flags.ignore_case, true);
-        assert_eq!(flags.compact_interval, 200)
+        assert_eq!(flags.compact_interval, 200);
+        assert_eq!(flags.log_file_path, "./log.db");
+
+        fs::remove_file("./log.db")?;
+        Ok(())
     }
 
     #[test]
     fn ignores_incorrect_flags() {
-        let args: Vec<String> = vec![String::from("--mode=mem_only")];
-
-        let flags = parse_options(args.into_iter());
-
-        assert_eq!(flags.mode, Mode::MemOnly)
-    }
-
-    #[test]
-    fn parses_correct_compact_interval() {
-        let args: Vec<String> = vec![String::from("--compact_interval=200")];
-
-        let flags = parse_options(args.into_iter());
-
-        assert_eq!(flags.compact_interval, 200)
-    }
-
-    #[test]
-    fn parses_incorrect_compact_interval() {
         let args: Vec<String> = vec![
-            String::from("--compact_interval=20.0"),
-            String::from("--compact_interval=test"),
+            String::from("--mode=testmode"),
+            String::from("--compact_interval=abc"),
+            String::from("--ignore_case=test"),
+            String::from("--log_file_path=.../1223456"),
+            String::from("--some_flag"),
+            String::from("not a flag"),
         ];
 
-        let flags = parse_options(args.into_iter());
+        let flags = Config::from_flags(args.into_iter());
 
-        assert_eq!(flags.compact_interval, 15)
-    }
-
-    #[test]
-    fn parses_ignore_case() {
-        let args: Vec<String> = vec![String::from("--ignore_case")];
-
-        let flags = parse_options(args.into_iter());
-
+        assert_eq!(flags.mode, Mode::Default);
+        assert_eq!(flags.compact_interval, DEFAULT_COMPACT_INTERVAL);
         assert_eq!(flags.ignore_case, true);
+        assert_eq!(flags.log_file_path, DEFAULT_LOG_FILE_PATH);
     }
 }

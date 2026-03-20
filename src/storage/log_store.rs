@@ -9,20 +9,22 @@ use std::{
 };
 
 use atomic_write_file::AtomicWriteFile;
+use colored::Colorize;
 
 use crate::{
-    command::{Command, parse_input},
-    options::StorageOptions,
-    storage::{Storage, utils::prepare_key},
+    command::Command,
+    config::Config,
+    storage::Storage,
+    utils::{prepare_key, print_err},
 };
 
 pub struct LogStorage {
     db: RwLock<HashMap<String, String>>,
-    options: StorageOptions,
+    options: Config,
 }
 
 impl LogStorage {
-    pub fn init(options: StorageOptions) -> Arc<LogStorage> {
+    pub fn init(options: Config) -> Arc<LogStorage> {
         let mut store = LogStorage {
             options,
             db: Default::default(),
@@ -37,8 +39,13 @@ impl LogStorage {
         };
 
         match store.restore_from_log() {
-            Err(err) => eprintln!("Could not restore from log file: {err}"),
-            Ok(count) => println!("{count} lines restored from log file!"),
+            Err(err) => print_err(format!("Could not restore from log file: {err}")),
+            Ok(count) => println!(
+                "{}",
+                format!("\n{count} lines restored from log file!")
+                    .blue()
+                    .bold()
+            ),
         }
 
         let store = Arc::new(store);
@@ -48,7 +55,7 @@ impl LogStorage {
             loop {
                 sleep(Duration::new(compact_store.options.compact_interval, 0));
                 if let Err(err) = compact_store.compact_log() {
-                    eprintln!("Could not compact store: {err}");
+                    print_err(format!("Could not compact store: {err}"));
                 }
             }
         });
@@ -62,7 +69,7 @@ impl LogStorage {
         let mut db_lock = match self.db.write() {
             Ok(db) => db,
             Err(msg) => {
-                eprintln!("Error locking db: {msg}");
+                print_err(format!("Error locking db: {msg}"));
                 return;
             }
         };
@@ -99,14 +106,14 @@ impl LogStorage {
 
         for line in BufReader::new(&log_file).lines() {
             let line = line?;
-            let command = parse_input(&line)?;
+            let command = Command::from(&line)?;
 
             match command {
                 Command::Set(k, v) => {
                     self.db_set(k, v);
                     count += 1;
                 }
-                _ => eprintln!("Expected SET command, got: {command}"),
+                _ => print_err("Expected SET command, got: {command}".to_string()),
             };
         }
 
@@ -133,7 +140,7 @@ impl Storage for LogStorage {
         self.db_set(k, v);
 
         if let Err(err) = self.save_to_log(k, v) {
-            eprintln!("Could not save command to log: {err}");
+            print_err(format!("Could not save command to log: {err}"));
         }
     }
 

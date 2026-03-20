@@ -5,17 +5,18 @@ use std::{
 };
 
 use crate::{
-    options::StorageOptions,
-    storage::{Storage, utils::prepare_key},
+    config::Config,
+    storage::Storage,
+    utils::{prepare_key, print_err},
 };
 
 pub struct MemStorage {
-    options: StorageOptions,
+    options: Config,
     pub db: RwLock<HashMap<String, String>>,
 }
 
 impl MemStorage {
-    pub fn init(options: StorageOptions) -> Arc<MemStorage> {
+    pub fn init(options: Config) -> Arc<MemStorage> {
         Arc::new(MemStorage {
             db: Default::default(),
             options,
@@ -28,7 +29,7 @@ impl MemStorage {
         let mut db_lock = match self.db.write() {
             Ok(db) => db,
             Err(msg) => {
-                eprintln!("Error locking db: {msg}");
+                print_err(format!("Error locking db: {msg}"));
                 return;
             }
         };

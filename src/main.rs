@@ -5,63 +5,71 @@ use std::{
 };
 
 use crate::{
-    command::{Command, parse_input},
-    options::{Mode, parse_options},
+    command::Command,
+    config::{Config, Mode},
     storage::{Storage, log_store::LogStorage, mem_store::MemStorage},
+    utils::print_err,
 };
 
+use colored::Colorize;
+
 mod command;
-mod options;
+mod config;
 mod storage;
+mod utils;
 
 fn main() {
-    println!("Welcome to mini-redis!\n");
+    println!("{}", "\nWELCOME TO MINI-REDIS!\n".blue().bold());
 
-    let options = parse_options(env::args());
+    let config = Config::from_flags(env::args());
 
-    options.print();
-
-    let store: Arc<dyn Storage> = match options.mode {
-        Mode::MemOnly => MemStorage::init(options),
-        Mode::Default => LogStorage::init(options),
+    let store: Arc<dyn Storage> = match config.mode {
+        Mode::MemOnly => MemStorage::init(config),
+        Mode::Default => LogStorage::init(config),
     };
 
     println!("");
-    println!("Please input your command");
-    println!("Type 'help' to list existing commands");
+    println!("{}", "Please input your command".green().bold());
+    println!("{}", "Type 'help' to list existing commands".green());
 
     loop {
         let mut input = String::new();
 
-        io::stdin()
-            .read_line(&mut input)
-            .expect("Failed to read line");
+        if let Err(msg) = io::stdin().read_line(&mut input) {
+            print_err(format!("Failed to read line: {msg}"));
+        }
 
         let mut input = input.trim().to_string();
 
-        let command = match parse_input(&mut input) {
+        let command = match Command::from(&mut input) {
             Ok(cmd) => cmd,
             Err(err) => {
-                println!("Error: {err}");
+                print_err(format!("Error: {err}"));
                 continue;
             }
         };
 
         match command {
             Command::Exit => {
-                println!("EXIT command received, shutting down...");
+                print_err(
+                    "EXIT command received, shutting down..."
+                        .red()
+                        .bold()
+                        .to_string(),
+                );
                 break;
             }
             Command::Help => {
                 println!(
-                    "Supported commands:\n'SET'/'set' {{key}} {{value}} - set value for key;\n'GET'/'get' {{key}} - get value for key\n'EXIT'/'exit' - exit the REPL loop;\n"
+                    "{}",
+                    "Supported commands:\n'SET'/'set' {{key}} {{value}} - set value for key;\n'GET'/'get' {{key}} - get value for key\n'EXIT'/'exit' - exit the REPL loop;".on_blue()
                 );
                 continue;
             }
             Command::Get(key) => {
                 match store.get(key) {
-                    Ok(value) => println!("{value}"),
-                    Err(err) => eprintln!("Could not get value from store: {err}"),
+                    Ok(value) => println!("{}", value.green()),
+                    Err(err) => print_err(format!("Could not get value from store: {err}")),
                 }
 
                 continue;
@@ -69,7 +77,7 @@ fn main() {
             Command::Set(k, v) => {
                 store.set(k, v);
 
-                println!("SET SUCCESS");
+                println!("{}", "SET SUCCESS".green());
 
                 continue;
             }

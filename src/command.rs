@@ -43,36 +43,38 @@ impl fmt::Display for CommandError {
     }
 }
 
-pub fn parse_input(input: &'_ String) -> Result<Command<'_>, CommandError> {
-    let mut input = input.split_whitespace();
+impl Command<'_> {
+    pub fn from(input: &'_ String) -> Result<Command<'_>, CommandError> {
+        let mut input = input.split_whitespace();
 
-    let cmd = match input.next() {
-        Some(cmd) => cmd.to_uppercase(),
-        None => return Err(CommandError::EmptyInput),
-    };
+        let cmd = match input.next() {
+            Some(cmd) => cmd.to_uppercase(),
+            None => return Err(CommandError::EmptyInput),
+        };
 
-    match cmd.as_str() {
-        "GET" | "SET" => (),
-        "EXIT" => return Ok(Command::Exit),
-        "HELP" => return Ok(Command::Help),
-        _ => return Err(CommandError::UnexpectedCommand(cmd.to_string())),
+        match cmd.as_str() {
+            "GET" | "SET" => (),
+            "EXIT" => return Ok(Command::Exit),
+            "HELP" => return Ok(Command::Help),
+            _ => return Err(CommandError::UnexpectedCommand(cmd.to_string())),
+        }
+
+        let key = match input.next() {
+            Some(key) => key,
+            None => return Err(CommandError::KeyNotFound),
+        };
+
+        if cmd == "GET" {
+            return Ok(Command::Get(key));
+        }
+
+        let value = match input.next() {
+            Some(value) => value,
+            None => return Err(CommandError::ValueNotFound),
+        };
+
+        Ok(Command::Set(key, value))
     }
-
-    let key = match input.next() {
-        Some(key) => key,
-        None => return Err(CommandError::KeyNotFound),
-    };
-
-    if cmd == "GET" {
-        return Ok(Command::Get(key));
-    }
-
-    let value = match input.next() {
-        Some(value) => value,
-        None => return Err(CommandError::ValueNotFound),
-    };
-
-    Ok(Command::Set(key, value))
 }
 
 #[cfg(test)]
@@ -82,7 +84,7 @@ pub mod tests {
     #[test]
     fn parses_exit() {
         let input = "exit".to_string();
-        let cmd = parse_input(&input);
+        let cmd = Command::from(&input);
 
         assert_eq!(cmd.unwrap(), Command::Exit);
     }
@@ -90,7 +92,7 @@ pub mod tests {
     #[test]
     fn parses_get() {
         let input = "get key".to_string();
-        let cmd = parse_input(&input);
+        let cmd = Command::from(&input);
 
         assert_eq!(cmd.unwrap(), Command::Get("key"));
     }
@@ -98,7 +100,7 @@ pub mod tests {
     #[test]
     fn parses_set() {
         let input = "set key value".to_string();
-        let cmd = parse_input(&input);
+        let cmd = Command::from(&input);
 
         assert_eq!(cmd.unwrap(), Command::Set("key", "value"));
     }
@@ -106,7 +108,7 @@ pub mod tests {
     #[test]
     fn handles_unexpected_cmd() {
         let input = "test".to_string();
-        let cmd = parse_input(&input);
+        let cmd = Command::from(&input);
 
         assert_eq!(
             cmd.err().unwrap(),
@@ -117,7 +119,7 @@ pub mod tests {
     #[test]
     fn handles_no_key() {
         let input = "get".to_string();
-        let cmd = parse_input(&input);
+        let cmd = Command::from(&input);
 
         assert_eq!(cmd.err().unwrap(), CommandError::KeyNotFound);
     }
@@ -125,7 +127,7 @@ pub mod tests {
     #[test]
     fn handles_no_value() {
         let input = "set key".to_string();
-        let cmd = parse_input(&input);
+        let cmd = Command::from(&input);
 
         assert_eq!(cmd.err().unwrap(), CommandError::ValueNotFound);
     }
